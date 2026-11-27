@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quick Choices Game</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* VOICE: a quiet late-night quiz show — calm, a little playful, never pushy in tone
+   IDEA: an arcade cabinet in a dark room; each screen is one "level"
+   PICTURE: a small animated emblem per question, centred above the text
+   COLOUR and TYPE: pure black, ivory ink, one cool steel accent; red/green only where the experiment sets them. Arial throughout
+   LAYOUT: one centred column, max 620px, the emblem, the question, the choices */
+:root{color-scheme:dark;--bg:#000;--ink:#f3eee4;--dim:#8f8a80;--line:#2a2824;--acc:#9cc3e6;--red:#d8342c;--green:#2f9e57;--panel:#0e0d0c}
+*{box-sizing:border-box;min-width:0}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.55 Arial,Helvetica,sans-serif;overflow-x:clip}
+h1,h2,.big{font-family:Arial,Helvetica,sans-serif;font-weight:600;line-height:1.08;text-wrap:balance;margin:0}
+h1{font-size:clamp(32px,6vw,50px)}h2{font-size:clamp(28px,5vw,42px)}
+.screen{display:none;min-height:100vh;min-height:100dvh;padding:clamp(28px,6vw,64px) max(5vw,18px);flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:22px}
+.screen.on{display:flex;animation:enter .5s ease both}
+@keyframes enter{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.col{width:100%;max-width:620px;display:flex;flex-direction:column;align-items:center;gap:22px}
+.lvl{font-size:14px;color:var(--dim);letter-spacing:.02em}
+p{margin:0;color:#d6d0c4;max-width:58ch}
+.small{font-size:14px;color:var(--dim)}
+.emblem{width:132px;height:132px}
+.emblem svg{width:100%;height:100%;overflow:visible}
+/* consent */
+.consent{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px;text-align:left;font-size:15.5px}
+.consent ul{margin:8px 0 0;padding-left:20px}.consent li{margin:4px 0}
+.start{position:relative;width:min(240px,62vw);aspect-ratio:1;border-radius:50%;border:0;cursor:pointer;background:radial-gradient(circle at 38% 32%,#fffaf0,#e6dcc8 45%,#a99d86 100%);color:#111;font:800 clamp(24px,5vw,32px)/1 Arial,sans-serif;box-shadow:0 10px 0 #5f574a,0 18px 40px rgba(255,240,210,.15);transition:transform .08s,box-shadow .08s}
+.start::after{content:"";position:absolute;inset:-14px;border-radius:50%;border:2px solid rgba(243,238,228,.35);animation:ring 1.8s ease-out infinite}
+.start:active{transform:translateY(8px);box-shadow:0 2px 0 #5f574a}
+.start span{display:block;font:600 14px/1.3 Arial,sans-serif;margin-top:8px;color:#3a352c}
+@keyframes ring{from{transform:scale(.92);opacity:1}to{transform:scale(1.18);opacity:0}}
+.link{background:none;border:0;color:var(--dim);font:inherit;font-size:15px;text-decoration:underline;cursor:pointer;min-height:44px;padding:0 10px}
+/* form */
+form.survey{width:100%;max-width:620px;display:flex;flex-direction:column;gap:14px;text-align:left}
+.q{display:grid;grid-template-columns:52px minmax(0,1fr);gap:14px;align-items:start;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+.q .ic{width:52px;height:52px}.q .ic svg{width:100%;height:100%;overflow:visible}
+.q label.t{display:block;font-weight:600;margin-bottom:8px}
+.opts{display:flex;flex-wrap:wrap;gap:8px}
+.opts label{display:inline-flex;align-items:center;gap:8px;border:1px solid #3a3731;border-radius:999px;padding:9px 14px;cursor:pointer;min-height:44px;font-size:16px}
+.opts input{accent-color:var(--acc);width:18px;height:18px;margin:0}
+.opts label:has(input:checked){border-color:var(--acc);background:rgba(156,195,230,.1)}
+input[type=text]{width:100%;font:16px Arial,sans-serif;background:#000;color:var(--ink);border:1px solid #3a3731;border-radius:10px;padding:11px 12px;min-height:44px}
+input:focus-visible,button:focus-visible{outline:2px solid var(--acc);outline-offset:3px}
+.btn{font:600 18px Arial,sans-serif;border-radius:999px;border:1px solid var(--ink);background:var(--ink);color:#000;padding:14px 34px;cursor:pointer;min-height:48px}
+.btn[disabled]{opacity:.35;cursor:not-allowed}
+.err{color:#ff9a8f;font-size:15px;min-height:1.4em}
+/* timer tube */
+.tube{width:min(420px,86vw);height:16px;border-radius:999px;border:1px solid #4a463f;background:#0b0a09;padding:2px;position:relative}
+.tube i{display:block;height:100%;width:100%;border-radius:999px;background:linear-gradient(90deg,#d9d2c4,#f6f1e6);transform-origin:left;box-shadow:0 0 12px rgba(246,241,230,.35)}
+.tube.low i{background:linear-gradient(90deg,#b8322b,#f05b4f);box-shadow:0 0 14px rgba(240,91,79,.5)}
+.secs{font:600 15px Arial,sans-serif;color:var(--dim);margin-top:-12px}
+/* answer buttons */
+.ans{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;width:100%}
+.a{flex:1 1 150px;max-width:220px;min-height:52px;border-radius:14px;font:600 16px Arial,sans-serif;cursor:pointer;border:2px solid transparent;color:#fff;transition:transform .1s}
+.a:active{transform:scale(.97)}
+.a.red{background:var(--red)}.a.green{background:var(--green)}
+.a.ghost{background:transparent;border-color:rgba(243,238,228,.16);color:rgba(243,238,228,.55)}
+.a.same{background:#2b3540;border-color:#2b3540}
+.a.same.sel{border-color:var(--ink);box-shadow:0 0 0 3px rgba(243,238,228,.18)}
+.a.same .tick{display:inline-block;width:1.1em;opacity:0}.a.same.sel .tick{opacity:1}
+/* animations */
+@keyframes bob{50%{transform:translateY(-7px)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes zz{0%{opacity:0;transform:translate(0,0) scale(.6)}30%{opacity:1}100%{opacity:0;transform:translate(16px,-30px) scale(1.1)}}
+@keyframes pulse{50%{transform:scale(1.08)}}
+@keyframes flip{0%,40%{transform:rotate(0)}50%,90%{transform:rotate(180deg)}100%{transform:rotate(360deg)}}
+@keyframes legs{50%{transform:rotate(-28deg)}}
+@keyframes legs2{50%{transform:rotate(28deg)}}
+@keyframes sway{50%{transform:rotate(6deg)}}
+@keyframes twinkle{50%{opacity:.2}}
+.bob{animation:bob 2.4s ease-in-out infinite}.spin{animation:spin 9s linear infinite;transform-origin:50% 50%;transform-box:fill-box}
+.z{animation:zz 2.4s ease-out infinite;transform-box:fill-box}.z2{animation-delay:.8s}.z3{animation-delay:1.6s}
+.pulse{animation:pulse 1.6s ease-in-out infinite;transform-origin:center;transform-box:fill-box}
+.flip{animation:flip 3s ease-in-out infinite;transform-origin:center;transform-box:fill-box}
+.l1{animation:legs .5s ease-in-out infinite;transform-origin:top;transform-box:fill-box}.l2{animation:legs2 .5s ease-in-out infinite;transform-origin:top;transform-box:fill-box}
+.sway{animation:sway 2.6s ease-in-out infinite;transform-origin:bottom;transform-box:fill-box}
+.tw{animation:twinkle 1.8s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+/* results */
+.panel{width:100%;max-width:1100px;text-align:left}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;font-size:14px;white-space:nowrap}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}
+th{color:var(--dim);font-weight:600;background:var(--panel);position:sticky;top:0}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.btn.alt{background:transparent;color:var(--ink)}
+#adminLink{position:fixed;right:14px;bottom:10px;display:none;z-index:5}
+</style>
+</head>
+<body>
+
+<!-- 1 CONSENT -->
+<section class="screen on" id="s1">
+  <div class="col">
+    <div class="lvl">Before we begin</div>
+    <h1>Will you share your answers for research?</h1>
+    <div class="consent">
+      This short game is part of behavioural economics research at Thammasat University. It takes about two minutes.
+      <ul>
+        <li>We record your answers and how long each one takes.</li>
+        <li>No name or email is collected. Answers are analysed in aggregate.</li>
+        <li>You can stop at any time by closing this page.</li>
+      </ul>
+    </div>
+    <button class="start" id="agree" aria-label="I agree, start the game">START<span>I agree to share my data</span></button>
+    <button class="link" id="decline">I don't want to take part</button>
+  </div>
+</section>
+
+<!-- 2 FIVE QUESTIONS -->
+<section class="screen" id="s2">
+  <div class="col">
+    <div class="lvl">Level 1 · About you</div>
+    <h2>Five quick questions</h2>
+  </div>
+  <form class="survey" id="survey" novalidate>
+    <div class="q"><div class="ic" data-art="gender"></div><div>
+      <label class="t">1. Which of the following best represents your gender?</label>
+      <div class="opts" role="radiogroup">
+        <label><input type="radio" name="gender" value="Woman">Woman</label>
+        <label><input type="radio" name="gender" value="Man">Man</label>
+        <label><input type="radio" name="gender" value="Non-binary">Non-binary</label>
+        <label><input type="radio" name="gender" value="Prefer not to say">Prefer not to say</label>
+      </div></div></div>
+    <div class="q"><div class="ic" data-art="uni"></div><div>
+      <label class="t" for="uni">2. Your university</label>
+      <input type="text" id="uni" name="uni" autocomplete="off" placeholder="Type your university"></div></div>
+    <div class="q"><div class="ic" data-art="globe"></div><div>
+      <label class="t" for="nat">3. What is your nationality?</label>
+      <input type="text" id="nat" name="nat" autocomplete="off" placeholder="Type your nationality"></div></div>
+    <div class="q"><div class="ic" data-art="moon"></div><div>
+      <label class="t" for="bed">4. Do you go to bed after 10 p.m.?</label>
+      <input type="text" id="bed" name="bed" autocomplete="off" placeholder="Type your answer"></div></div>
+    <div class="q"><div class="ic" data-art="run"></div><div>
+      <label class="t" for="ex">5. Do you exercise every day?</label>
+      <input type="text" id="ex" name="ex" autocomplete="off" placeholder="Type your answer"></div></div>
+    <div class="err" id="err" role="alert"></div>
+    <div style="text-align:center"><button class="btn" type="submit">NEXT</button></div>
+  </form>
+</section>
+
+<!-- 3 INTERSTITIAL -->
+<section class="screen" id="s3">
+  <div class="col">
+    <div class="emblem" data-art="hourglass"></div>
+    <div class="lvl">Level 2</div>
+    <h1>Let's play again, this time with a time limit.</h1>
+    <p>Five questions. You have 20 seconds in total for all five.</p>
+    <button class="btn" id="go">I'm ready</button>
+  </div>
+</section>
+
+<!-- 4–8 TIMED -->
+<section class="screen" id="s4"><div class="col">
+  <div class="tube"><i></i></div><div class="secs">20 s left</div>
+  <div class="emblem" data-art="gender"></div><div class="lvl">Question 1 of 5</div>
+  <h2>Are you a woman?</h2>
+  <div class="ans"><button class="a green" data-v="No">No</button><button class="a red" data-v="Yes">Yes</button></div>
+</div></section>
+
+<section class="screen" id="s5"><div class="col">
+  <div class="tube"><i></i></div><div class="secs">20 s left</div>
+  <div class="emblem" data-art="uni"></div><div class="lvl">Question 2 of 5</div>
+  <h2>Do you study at Thammasat University?</h2>
+  <div class="ans"><button class="a green" data-v="No">No</button><button class="a ghost" data-v="Yes">Yes</button></div>
+</div></section>
+
+<section class="screen" id="s6"><div class="col">
+  <div class="tube"><i></i></div><div class="secs">20 s left</div>
+  <div class="emblem" data-art="globe"></div><div class="lvl">Question 3 of 5</div>
+  <h2>Are you Thai?</h2>
+  <div class="ans" data-mode="select">
+    <button class="a same" data-v="Yes" aria-pressed="false"><span class="tick">✓</span>Yes</button>
+    <button class="a same sel" data-v="No" aria-pressed="true"><span class="tick">✓</span>No</button>
+  </div>
+  <button class="btn" data-next>Continue</button>
+</div></section>
+
+<section class="screen" id="s7"><div class="col">
+  <div class="tube"><i></i></div><div class="secs">20 s left</div>
+  <div class="emblem" data-art="moon"></div><div class="lvl">Question 4 of 5</div>
+  <h2>Do you go to bed after 10 p.m.?</h2>
+  <div class="ans"><button class="a red" data-v="No">No</button><button class="a green" data-v="Yes">Yes</button></div>
+</div></section>
+
+<section class="screen" id="s8"><div class="col">
+  <div class="tube"><i></i></div><div class="secs">20 s left</div>
+  <div class="emblem" data-art="run"></div><div class="lvl">Question 5 of 5</div>
+  <h2>Do you exercise every day?</h2>
+  <div class="ans" data-mode="select">
+    <button class="a ghost" data-v="No" aria-pressed="false">No</button>
+    <button class="a ghost" data-v="Yes" aria-pressed="false">Yes</button>
+  </div>
+  <button class="btn" data-next>Submit</button>
+</div></section>
+
+<!-- END -->
+<section class="screen" id="s9"><div class="col">
+  <div class="emblem" data-art="star"></div>
+  <h1 id="endTitle">Thank you!</h1>
+  <p id="endText">Your answers have been submitted. You can close this page now.</p>
+</div></section>
+
+<!-- RESEARCHER RESULTS -->
+<section class="screen" id="results"><div class="panel">
+  <div class="row" style="justify-content:space-between;margin-bottom:16px">
+    <div><h2>Responses</h2><p class="small" id="rCount">Loading…</p></div>
+    <div class="row">
+      <button class="btn" id="xl">Download Excel (.xlsx)</button>
+      <button class="btn alt" id="back">Back to game</button>
+    </div>
+  </div>
+  <p class="small" id="rNote" style="margin-bottom:12px"></p>
+  <div class="scroll"><table id="rTable"></table></div>
+</div></section>
+
+<button class="link" id="adminLink">Researcher view</button>
+
+<script>
+{
+const ART={
+gender:`<svg viewBox="0 0 100 100"><g class="sway" fill="none" stroke="#f3eee4" stroke-width="5" stroke-linecap="round"><circle cx="38" cy="40" r="16"/><path d="M38 56v22M29 69h18"/></g><g class="sway" style="animation-delay:-1.3s" fill="none" stroke="#9cc3e6" stroke-width="5" stroke-linecap="round"><circle cx="62" cy="58" r="16"/><path d="M73 47l13-13M76 34h10v10"/></g></svg>`,
+uni:`<svg viewBox="0 0 100 100"><g class="bob"><path d="M50 22 92 40 50 58 8 40Z" fill="#f3eee4"/><path d="M26 49v17c0 6 11 12 24 12s24-6 24-12V49L50 60Z" fill="#c9c2b4"/><path d="M84 43v22" stroke="#9cc3e6" stroke-width="4" stroke-linecap="round"/><circle cx="84" cy="68" r="5" fill="#9cc3e6"/></g></svg>`,
+globe:`<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="34" fill="#0e1b26" stroke="#9cc3e6" stroke-width="4"/><g class="spin" fill="none" stroke="#9cc3e6" stroke-width="3"><ellipse cx="50" cy="50" rx="14" ry="34"/><path d="M16 50h68M22 32h56M22 68h56"/></g><path d="M38 34c6-4 14 0 12 7s-10 4-12 10-8 2-8-4 3-9 8-13Z" fill="#f3eee4" opacity=".85" class="bob"/></svg>`,
+moon:`<svg viewBox="0 0 100 100"><path class="bob" d="M58 20a30 30 0 1 0 22 48A26 26 0 0 1 58 20Z" fill="#f3eee4"/><circle cx="20" cy="22" r="2.5" fill="#f3eee4" class="tw"/><circle cx="86" cy="30" r="2" fill="#f3eee4" class="tw" style="animation-delay:.6s"/><g fill="#9cc3e6" font-family="Arial,sans-serif" font-weight="800"><text x="66" y="40" font-size="14" class="z">z</text><text x="70" y="34" font-size="18" class="z z2">z</text><text x="74" y="28" font-size="22" class="z z3">Z</text></g></svg>`,
+run:`<svg viewBox="0 0 100 100" fill="none" stroke="#f3eee4" stroke-width="6" stroke-linecap="round"><g class="bob" style="animation-duration:.5s"><circle cx="54" cy="20" r="9" fill="#f3eee4" stroke="none"/><path d="M52 32 46 58"/><path d="M50 38 34 48M50 38l18 8" stroke="#9cc3e6"/></g><path class="l1" d="M46 58 36 84"/><path class="l2" d="M46 58 60 82"/><path d="M14 90h72" stroke="#2a2824" stroke-width="3"/></svg>`,
+hourglass:`<svg viewBox="0 0 100 100"><g class="flip"><path d="M28 14h44M28 86h44" stroke="#f3eee4" stroke-width="6" stroke-linecap="round"/><path d="M32 16c0 22 36 22 36 34S32 62 32 84h36c0-22-36-22-36-34s36-12 36-34Z" fill="none" stroke="#f3eee4" stroke-width="4"/><path d="M38 22h24c-2 10-12 14-12 22-1-8-10-12-12-22Z" fill="#9cc3e6"/><path d="M40 80h20c-3-6-7-9-10-9s-7 3-10 9Z" fill="#9cc3e6"/></g></svg>`,
+star:`<svg viewBox="0 0 100 100"><path class="pulse" d="M50 12l11 24 26 3-19 18 5 26-23-13-23 13 5-26-19-18 26-3Z" fill="#f3eee4"/><circle cx="18" cy="20" r="3" fill="#9cc3e6" class="tw"/><circle cx="84" cy="78" r="3" fill="#9cc3e6" class="tw" style="animation-delay:.7s"/></svg>`
+};
+document.querySelectorAll('[data-art]').forEach(el=>el.innerHTML=ART[el.dataset.art]);
+
+const $=id=>document.getElementById(id);
+const LIMIT=20000;
+const TIMED=[
+ {id:'s4',key:'T1_woman',design:'Yes=red, No=green'},
+ {id:'s5',key:'T2_thammasat',design:'Yes=transparent, No=green'},
+ {id:'s6',key:'T3_thai',design:'Opt-out default: No preselected, same colour'},
+ {id:'s7',key:'T4_bed_after_10',design:'Yes=green, No=red'},
+ {id:'s8',key:'T5_exercise_daily',design:'Yes & No both transparent'}
+];
+const rid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+let rec=null,timer=null,raf=null,tStart=0,idx=-1,sel=null,dbRef=null,uid=null;
+
+function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on',s.id===id));window.scrollTo(0,0)}
+
+/* 1 consent */
+$('agree').onclick=()=>{rec={run_id:rid(),started_at:new Date().toISOString(),consent:'Yes'};show('s2')};
+$('decline').onclick=()=>{$('endTitle').textContent='No problem.';$('endText').textContent='Nothing was recorded. You can close this page.';show('s9')};
+
+/* 2 survey */
+$('survey').addEventListener('submit',e=>{
+  e.preventDefault();const f=e.target;
+  const g=f.querySelector('input[name=gender]:checked');
+  const v={gender:g?g.value:'',uni:f.uni.value.trim(),nat:f.nat.value.trim(),bed:f.bed.value.trim(),ex:f.ex.value.trim()};
+  if(!v.gender||!v.uni||!v.nat||!v.bed||!v.ex){$('err').textContent='Please answer all five questions.';return}
+  $('err').textContent='';
+  Object.assign(rec,{Q1_gender:v.gender,Q2_university:v.uni,Q3_nationality:v.nat,Q4_bed_after_10:v.bed,Q5_exercise_daily:v.ex});
+  show('s3');
+});
+
+/* 4–8 timed: ONE 10-second budget shared by all five questions */
+let deadline=0,ended=false;
+$('go').onclick=()=>{idx=-1;ended=false;deadline=performance.now()+LIMIT;clearTimeout(timer);timer=setTimeout(timeUp,LIMIT);nextTimed()};
+function nextTimed(){
+  idx++;
+  if(idx>=TIMED.length){endTimed();return}
+  const t=TIMED[idx],s=$(t.id);
+  sel=t.id==='s6'?'No':null;
+  s.querySelectorAll('.a').forEach(b=>{const on=t.id==='s6'&&b.dataset.v==='No';b.classList.toggle('sel',on);b.setAttribute('aria-pressed',on);b.style.borderColor=''});
+  show(t.id);
+  tStart=performance.now();
+  const bar=s.querySelector('.tube i'),tube=s.querySelector('.tube'),secs=s.querySelector('.secs');
+  const tick=()=>{const left=Math.max(0,deadline-performance.now());
+    bar.style.transform=`scaleX(${left/LIMIT})`;secs.textContent=Math.ceil(left/1000)+' s left';
+    tube.classList.toggle('low',left<3000);
+    if(left>0&&!ended)raf=requestAnimationFrame(tick)};
+  cancelAnimationFrame(raf);tick();
+}
+function record(i,v,ms,timedOut){
+  const t=TIMED[i];
+  rec[t.key]=v||'(no answer)';rec[t.key+'_ms']=ms;rec[t.key+'_timeout']=timedOut?'Yes':'No';
+  if(t.id==='s6')rec.T3_kept_default=v==null?'(not reached)':v==='No'?'Yes':'No';
+}
+function answer(v){
+  if(ended)return;
+  record(idx,v,Math.round(performance.now()-tStart),false);
+  nextTimed();
+}
+function timeUp(){
+  if(ended)return;
+  if(idx>=0&&idx<TIMED.length)record(idx,sel,Math.round(performance.now()-tStart),true);
+  for(let i=idx+1;i<TIMED.length;i++)record(i,null,0,true);
+  endTimed();
+}
+function endTimed(){
+  if(ended)return;ended=true;clearTimeout(timer);cancelAnimationFrame(raf);
+  rec.total_time_ms=Math.round(Math.min(LIMIT,LIMIT-(deadline-performance.now())));
+  rec.ran_out_of_time=rec.T5_exercise_daily_timeout==='Yes'?'Yes':'No';
+  finish();
+}
+TIMED.forEach(t=>{
+  const s=$(t.id),wrap=s.querySelector('.ans'),selectMode=wrap.dataset.mode==='select';
+  wrap.querySelectorAll('.a').forEach(b=>b.addEventListener('click',()=>{
+    if(selectMode){sel=b.dataset.v;wrap.querySelectorAll('.a').forEach(x=>{const on=x===b;x.classList.toggle('sel',on);x.setAttribute('aria-pressed',on);if(t.id==='s8')x.style.borderColor=on?'rgba(243,238,228,.7)':''})}
+    else answer(b.dataset.v);
+  }));
+  const nx=s.querySelector('[data-next]');
+  if(nx)nx.addEventListener('click',()=>{if(t.id==='s8'&&!sel){return}answer(sel)});
+});
+
+/* match coding (auto, check by hand) */
+const yes=s=>/^(y|yes|yeah|yep|ใช่|ค่ะ|ครับ|true|always|every)/i.test(s.trim());
+const no=s=>/^(n|no|nope|not|never|ไม่)/i.test(s.trim());
+const yn=s=>yes(s)?'Yes':no(s)?'No':'?';
+function code(r){
+  const m=(a,b)=>a==='?'||b==='(no answer)'?'?':a===b?'Match':'Mismatch';
+  r.M1_woman=m(r.Q1_gender==='Woman'?'Yes':r.Q1_gender==='Prefer not to say'?'?':'No',r.T1_woman);
+  r.M2_thammasat=m(/thammasat|ธรรมศาสตร์|\btu\b/i.test(r.Q2_university)?'Yes':'No',r.T2_thammasat);
+  r.M3_thai=m(/thai|ไทย|thailand/i.test(r.Q3_nationality)?'Yes':'No',r.T3_thai);
+  r.M4_bed=m(yn(r.Q4_bed_after_10),r.T4_bed_after_10);
+  r.M5_exercise=m(yn(r.Q5_exercise_daily),r.T5_exercise_daily);
+}
+
+/* save */
+const LKEY='dp_responses_v1';
+const loadLocal=()=>{try{return JSON.parse(localStorage.getItem(LKEY)||'[]')}catch(e){return[]}};
+const saveLocal=r=>{try{const a=loadLocal();a.push(r);localStorage.setItem(LKEY,JSON.stringify(a))}catch(e){}};
+async function finish(){
+  rec.submitted_at=new Date().toISOString();code(rec);
+  saveLocal(rec);
+  $('endTitle').textContent='Thank you!';$('endText').textContent='Saving your answers…';show('s9');
+  let ok=false;
+  try{
+    const db=await claude.use('db');const user=await claude.use('user');
+    const id=user?await user.id():null;
+    if(db&&id){const ref=db.doc('responses/'+id);const cur=await ref.get();
+      const runs=cur.exists&&Array.isArray(cur.data().runs)?cur.data().runs.slice():[];
+      runs.push(rec);await ref.set({runs,updated_at:rec.submitted_at});ok=true}
+  }catch(e){ok=false}
+  $('endText').textContent=ok?'Your answers have been submitted. You can close this page now.':'Your answers were saved on this device. You can close this page now.';
+}
+
+/* researcher view */
+const COLS=['run_id','started_at','submitted_at','consent','Q1_gender','Q2_university','Q3_nationality','Q4_bed_after_10','Q5_exercise_daily',
+ ...TIMED.flatMap(t=>[t.key,t.key+'_ms',t.key+'_timeout']),'T3_kept_default','total_time_ms','ran_out_of_time','M1_woman','M2_thammasat','M3_thai','M4_bed','M5_exercise'];
+let rows=[];
+async function loadAll(){
+  const byId=new Map();let dbNote='';
+  loadLocal().forEach(r=>byId.set(r.run_id,{...r,source:'this device'}));
+  try{const db=await claude.use('db');
+    if(db){const snap=await db.collection('responses').get();
+      snap.docs.forEach(d=>(d.data().runs||[]).forEach(r=>byId.set(r.run_id,{...r,source:'online'})));
+      dbNote=`Online responses: ${snap.size} participant(s).`}
+    else dbNote='Online storage is not available in this view; showing responses saved on this device only.'}
+  catch(e){dbNote='Could not reach online storage; showing responses saved on this device only.'}
+  rows=[...byId.values()].sort((a,b)=>String(a.submitted_at).localeCompare(String(b.submitted_at)));
+  $('rCount').textContent=rows.length+' response'+(rows.length===1?'':'s');
+  $('rNote').textContent=dbNote+' Columns M1–M5 compare Level 1 with Level 2 answers automatically; check "?" cells by hand.';
+  const t=$('rTable');t.textContent='';
+  const hr=t.insertRow();[...COLS,'source'].forEach(c=>{const th=document.createElement('th');th.textContent=c;hr.appendChild(th)});
+  if(!rows.length){const r=t.insertRow();const c=r.insertCell();c.colSpan=COLS.length+1;c.textContent='No responses yet.'}
+  rows.forEach(r=>{const tr=t.insertRow();[...COLS,'source'].forEach(c=>tr.insertCell().textContent=r[c]??'')});
+}
+$('xl').onclick=async()=>{
+  const btn=$('xl');
+  if(!window.XLSX){btn.textContent='Excel library did not load';return}
+  const wb=XLSX.utils.book_new();
+  const data=rows.map(r=>Object.fromEntries([...COLS,'source'].map(c=>[c,r[c]??''])));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data,{header:[...COLS,'source']}),'Responses');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(TIMED.map((t,i)=>({page:i+4,column:t.key,design:t.design}))),'Design key');
+  const buf=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  try{const dl=await claude.use('downloads');if(!dl){btn.textContent='Download not available here';return}
+    await dl.save({filename:'dark-pattern-responses.xlsx',data:new Uint8Array(buf)});btn.textContent='Downloaded ✓'}
+  catch(e){btn.textContent=e&&e.code==='declined'?'Download Excel (.xlsx)':'Download failed, try again'}
+};
+$('adminLink').onclick=()=>{location.hash='results'};
+$('back').onclick=()=>{history.replaceState(null,'',location.pathname);show('s1')};
+let isOwner=false;
+const route=()=>{if(location.hash==='#results'&&isOwner){show('results');loadAll()}};
+window.addEventListener('hashchange',route);
+(async()=>{try{const u=await claude.use('user');isOwner=!!(u&&await u.isOwner());if(isOwner){$('adminLink').style.display='block';route()}}catch(e){}})();
+}
+</script>
+</body>
+</html>
